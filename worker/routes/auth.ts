@@ -10,11 +10,32 @@ export const authRoutes = new Hono<{ Bindings: Bindings; Variables: { user: JWTP
 // --- Register ---
 authRoutes.post('/register', async (c) => {
   try {
-    const { email, password, name, matrixNo, program, session, semester, baseSection } = await c.req.json();
+    const {
+      email, password, name, role,
+      // Student fields
+      matrixNo, program, session, semester, baseSection,
+      // Advisor fields
+      department, officeLocation, assignedSection, consultationHours
+    } = await c.req.json<{
+      email: string; password: string; name: string; role?: string;
+      matrixNo?: string; program?: string; session?: string;
+      semester?: number; baseSection?: string;
+      department?: string; officeLocation?: string;
+      assignedSection?: string; consultationHours?: string;
+    }>();
 
     if (!email || !password || !name) {
       return c.json({ error: 'Email, password, and name are required' }, 400);
     }
+
+    const userRole = role || 'STUDENT';
+    if (!['STUDENT', 'ADVISOR', 'ADMIN'].includes(userRole)) {
+      return c.json({ error: 'Invalid role' }, 400);
+    }
+
+    // Admin/Advisor registration: only allow if caller is already an admin (or via seed)
+    // For now, public registration creates STUDENT only
+    const effectiveRole = 'STUDENT'; // Public API only creates students
 
     const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
     if (existing) {
@@ -28,22 +49,33 @@ authRoutes.post('/register', async (c) => {
     const userId = crypto.randomUUID();
     const now = Math.floor(Date.now() / 1000);
 
-    await c.env.DB.prepare(
+    // Insert base user
+    const baseStmt = c.env.DB.prepare(
       `INSERT INTO users (id, email, password_hash, name, role, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'STUDENT', ?, ?)`
-    ).bind(userId, email, passwordHash, name, now, now).run();
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
 
-    // Create student profile
-    await c.env.DB.prepare(
-      `INSERT INTO students (user_id, matrix_no, program, session, semester, base_section)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(userId, matrixNo || null, program || 'DIPLOMA IN MECHANICAL ENGINEERING (DKM)', session || null, semester || 1, baseSection || null).run();
+    if (effectiveRole === 'STUDENT') {
+      // Insert user + student profile in a batch
+      const studentStmt = c.env.DB.prepare(
+        `INSERT INTO students (user_id, matrix_no, program, session, semester, base_section)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      );
+      await c.env.DB.batch([
+        baseStmt.bind(userId, email, passwordHash, name, effectiveRole, now, now),
+        studentStmt.bind(userId, matrixNo || null, program || 'DIPLOMA IN MECHANICAL ENGINEERING (DKM)', session || null, semester || 1, baseSection || null),
+      ]);
+    } else {
+      await baseStmt.bind(userId, email, passwordHash, name, effectiveRole, now, now).run();
+    }
 
-    const token = await signToken({ userId, email, role: 'STUDENT' }, c.env.JWT_SECRET);
+    const token = await signToken({ userId, email, role: effectiveRole }, c.env.JWT_SECRET);
 
     return c.json({
       token,
-      user: { id: userId, email, name, role: 'STUDENT', matrixNo, program, baseSection }
+      user: effectiveRole === 'STUDENT'
+        ? { id: userId, email, name, role: effectiveRole, matrixNo, program, baseSection }
+        : { id: userId, email, name, role: effectiveRole }
     }, 201);
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
