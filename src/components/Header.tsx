@@ -13,6 +13,7 @@ import {
   HelpCircle,
   MessageSquarePlus,
   Building,
+  Sparkles,
   LogOut
 } from 'lucide-react';
 import { ThemePreferences, UserRole } from '../types';
