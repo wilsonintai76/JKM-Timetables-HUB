@@ -50,16 +50,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp }) => {
         >
           <div className="inline-flex items-center space-x-2 bg-cyan-800/50 px-3 py-1 rounded-full border border-cyan-700/50 mb-6">
             <Zap className="w-4 h-4 text-cyan-400 fill-cyan-400" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-100">Smart Academic Scheduling</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-100">Jabatan Kejuruteraan Mekanikal</span>
           </div>
           
           <h1 className="text-5xl lg:text-7xl font-black mb-8 leading-[1.1] tracking-tight">
-            JKM <span className="text-cyan-400">Edge</span> <br/>
-            Academic Portal.
+            JKM <span className="text-cyan-400">Academic</span><br/>
+            Portal
           </h1>
           
           <p className="text-lg lg:text-xl text-cyan-100/70 mb-12 max-w-lg leading-relaxed font-medium">
-            Next-gen scheduling for Politeknik Malaysia. Deploying high-performance matrix resolution for every student, powered by Hono and Edge Intelligence.
+            Smart scheduling for Politeknik Malaysia. Clash resolution, PA endorsement, and timetable management — powered by Cloudflare Workers.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

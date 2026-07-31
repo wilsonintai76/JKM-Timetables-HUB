@@ -1,6 +1,6 @@
 {
-  "name": "Mechanical Engineering Timetable Hub",
-  "description": "Master timetable Excel parser, repeat course clash detector, PA approval slip generator, and schedule exporter for JKM students.",
+  "name": "JKM Academic Portal",
+  "description": "Academic scheduling portal for Jabatan Kejuruteraan Mekanikal — timetable management, clash resolution, PA approval slips, and student schedule tools.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
