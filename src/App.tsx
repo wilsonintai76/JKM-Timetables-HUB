@@ -36,7 +36,6 @@ import { SavedSchedulesModal } from './components/SavedSchedulesModal';
 import { ThemeCustomizer } from './components/ThemeCustomizer';
 import { FormatGuideModal } from './components/FormatGuideModal';
 import { FeedbackModal } from './components/FeedbackModal';
-import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { LoginView } from './components/auth/LoginView';
 
 import {
@@ -112,7 +111,6 @@ export default function App() {
   
   // MODALS STATE
   const [isSavedModalOpen, setIsSavedModalOpen] = useState<boolean>(false);
-  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] = useState<boolean>(false);
   const [isThemeModalOpen, setIsThemeModalOpen] = useState<boolean>(false);
   const [isFormatGuideModalOpen, setIsFormatGuideModalOpen] = useState<boolean>(false);
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false);
@@ -476,13 +474,12 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         userRole={userRole}
-        onSelectRole={setUserRole}
         fileName={fileName}
         isExcelLoaded={isExcelLoaded}
         onFileUpload={handleFileUpload}
         onResetSample={handleResetSample}
         onOpenDrafts={() => setIsSavedModalOpen(true)}
-        onOpenGoogleDrive={() => setIsGoogleDriveModalOpen(true)}
+
         onOpenTheme={() => setIsThemeModalOpen(true)}
         onOpenFormatGuide={() => setIsFormatGuideModalOpen(true)}
         onOpenFeedback={() => setIsFeedbackModalOpen(true)}

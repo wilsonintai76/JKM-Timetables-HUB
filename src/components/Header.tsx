@@ -5,8 +5,6 @@ import {
   RefreshCw,
   Bookmark,
   ShieldCheck,
-  User,
-  Sparkles,
   Calendar,
   Layers,
   Printer,
@@ -15,10 +13,9 @@ import {
   HelpCircle,
   MessageSquarePlus,
   Building,
-  Cloud,
   LogOut
 } from 'lucide-react';
-import { DepartmentCode, ThemePreferences, UserRole } from '../types';
+import { ThemePreferences, UserRole } from '../types';
 import { checkPolicy } from '../utils/pbac';
 import { getThemePalette } from '../utils/theme';
 
@@ -26,13 +23,11 @@ interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   userRole: UserRole;
-  onSelectRole: (role: UserRole) => void;
   fileName: string;
   isExcelLoaded: boolean;
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onResetSample: () => void;
   onOpenDrafts: () => void;
-  onOpenGoogleDrive: () => void;
   onOpenTheme: () => void;
   onOpenFormatGuide: () => void;
   onOpenFeedback: () => void;
@@ -49,13 +44,11 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   userRole,
-  onSelectRole,
   fileName,
   isExcelLoaded,
   onFileUpload,
   onResetSample,
   onOpenDrafts,
-  onOpenGoogleDrive,
   onOpenTheme,
   onOpenFormatGuide,
   onOpenFeedback,
@@ -189,36 +182,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline">Drafts</span>
             </button>
 
-            {/* Google Drive Cloud */}
-            <button
-              onClick={onOpenGoogleDrive}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition shadow-sm"
-              title="Google Drive Cloud Timetables & Backup"
-            >
-              <Cloud className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Drive Cloud</span>
-            </button>
-
-            {/* Role Switcher */}
-            <div className={`flex items-center space-x-1 px-2 py-0.5 rounded-md ${themeStyle.bgMuted} border ${themeStyle.borderColor} text-xs`}>
-              <span className="text-slate-500 font-medium px-1 hidden md:inline">Role:</span>
-              <select
-                value={userRole}
-                onChange={e => onSelectRole(e.target.value as UserRole)}
-                className={`bg-transparent font-bold focus:outline-none cursor-pointer text-xs ${
-                  userRole === 'ADMIN'
-                    ? 'text-amber-600'
-                    : userRole === 'ADVISOR'
-                    ? 'text-purple-600'
-                    : themeStyle.accentText
-                }`}
-                title="Policy-Based Access Control Role Switcher"
-              >
-                <option value="STUDENT" className="bg-white text-slate-800 font-semibold">👨‍🎓 Student</option>
-                <option value="ADVISOR" className="bg-white text-purple-700 font-semibold">👩‍🏫 Advisor</option>
-                <option value="ADMIN" className="bg-white text-amber-700 font-semibold">🔑 Admin</option>
-              </select>
-            </div>
           </div>
         </div>
 
