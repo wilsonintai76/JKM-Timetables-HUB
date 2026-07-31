@@ -4,7 +4,6 @@ import { optionalAuth, JWTPayload } from '../middleware/auth';
 
 export const clashRoutes = new Hono<{ Bindings: Bindings; Variables: { user?: JWTPayload } }>();
 
-// --- Helper: time overlap check ---
 function timeToDecimal(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h + m / 60;
@@ -22,14 +21,16 @@ clashRoutes.post('/analyze', optionalAuth, async (c) => {
       baseSection: string;
     }>();
 
-    if (!repeatCourseCodes || !baseSection) {
+    if (!repeatCourseCodes?.length || !baseSection) {
       return c.json({ error: 'repeatCourseCodes and baseSection required' }, 400);
     }
 
-    // Get base class slots
-    const { results: baseSlots } = await c.env.DB.prepare(
-      'SELECT * FROM master_slots WHERE section = ?'
-    ).bind(baseSection).all();
+    // Get base class slots (JOIN courses for names)
+    const { results: baseSlots } = await c.env.DB.prepare(`
+      SELECT ms.*, c.name as course_name, c.credit_hours
+      FROM master_slots ms JOIN courses c ON ms.course_code = c.code
+      WHERE ms.section = ?
+    `).bind(baseSection).all();
 
     if (!baseSlots.length) {
       return c.json({ error: `No slots found for section ${baseSection}` }, 404);
@@ -38,9 +39,11 @@ clashRoutes.post('/analyze', optionalAuth, async (c) => {
     const analysis = [];
 
     for (const courseCode of repeatCourseCodes) {
-      const { results: courseSlots } = await c.env.DB.prepare(
-        'SELECT * FROM master_slots WHERE course_code = ?'
-      ).bind(courseCode).all();
+      const { results: courseSlots } = await c.env.DB.prepare(`
+        SELECT ms.*, c.name as course_name, c.credit_hours
+        FROM master_slots ms JOIN courses c ON ms.course_code = c.code
+        WHERE ms.course_code = ?
+      `).bind(courseCode).all();
 
       if (!courseSlots.length) continue;
 
@@ -57,6 +60,7 @@ clashRoutes.post('/analyze', optionalAuth, async (c) => {
         const clashes: any[] = [];
         for (const r of slots) {
           for (const b of baseSlots) {
+            // day is now INTEGER: 0=ISNIN..5=SABTU
             if ((r as any).day === (b as any).day && overlaps(
               (r as any).start_time, (r as any).end_time,
               (b as any).start_time, (b as any).end_time
@@ -68,28 +72,18 @@ clashRoutes.post('/analyze', optionalAuth, async (c) => {
         return {
           section: sec,
           slots: slots.map(s => ({
-            id: (s as any).id,
-            section: (s as any).section,
-            courseCode: (s as any).course_code,
-            courseName: (s as any).course_name,
-            creditHours: (s as any).credit_hours,
-            day: (s as any).day,
-            startTime: (s as any).start_time,
-            endTime: (s as any).end_time,
-            venue: (s as any).venue,
-            lecturer: (s as any).lecturer,
+            id: (s as any).id, section: (s as any).section,
+            courseCode: (s as any).course_code, courseName: (s as any).course_name,
+            creditHours: (s as any).credit_hours, day: (s as any).day,
+            startTime: (s as any).start_time, endTime: (s as any).end_time,
+            venue: (s as any).venue, lecturer: (s as any).lecturer,
           })),
           isClashFree: clashes.length === 0,
           clashes,
         };
       });
 
-      analysis.push({
-        courseCode,
-        courseName: first.course_name,
-        creditHours: first.credit_hours,
-        sections,
-      });
+      analysis.push({ courseCode, courseName: first.course_name, creditHours: first.credit_hours, sections });
     }
 
     return c.json({ analysis });

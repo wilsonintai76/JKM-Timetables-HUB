@@ -2,6 +2,9 @@ import { Hono } from 'hono';
 import { Bindings } from '../index';
 import { signToken, authMiddleware, JWTPayload } from '../middleware/auth';
 
+// Day mapping helpers
+const DAY_MAP: Record<string, number> = { ISNIN: 0, SELASA: 1, RABU: 2, KHAMIS: 3, JUMAAT: 4, SABTU: 5 };
+
 export const authRoutes = new Hono<{ Bindings: Bindings; Variables: { user: JWTPayload } }>();
 
 // --- Register ---
@@ -13,22 +16,28 @@ authRoutes.post('/register', async (c) => {
       return c.json({ error: 'Email, password, and name are required' }, 400);
     }
 
-    // Check if user already exists
     const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
     if (existing) {
       return c.json({ error: 'User already exists' }, 409);
     }
 
-    // Hash password using Web Crypto
     const encoder = new TextEncoder();
     const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(password + c.env.JWT_SECRET));
     const passwordHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 
     const userId = crypto.randomUUID();
+    const now = Math.floor(Date.now() / 1000);
+
     await c.env.DB.prepare(
-      `INSERT INTO users (id, email, password_hash, name, matrix_no, role, program, session, semester, base_section)
-       VALUES (?, ?, ?, ?, ?, 'STUDENT', ?, ?, ?, ?)`
-    ).bind(userId, email, passwordHash, name, matrixNo || null, program || 'DIPLOMA IN MECHANICAL ENGINEERING (DKM)', session || null, semester || null, baseSection || null).run();
+      `INSERT INTO users (id, email, password_hash, name, role, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'STUDENT', ?, ?)`
+    ).bind(userId, email, passwordHash, name, now, now).run();
+
+    // Create student profile
+    await c.env.DB.prepare(
+      `INSERT INTO students (user_id, matrix_no, program, session, semester, base_section)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).bind(userId, matrixNo || null, program || 'DIPLOMA IN MECHANICAL ENGINEERING (DKM)', session || null, semester || 1, baseSection || null).run();
 
     const token = await signToken({ userId, email, role: 'STUDENT' }, c.env.JWT_SECRET);
 
@@ -45,48 +54,44 @@ authRoutes.post('/register', async (c) => {
 authRoutes.post('/login', async (c) => {
   try {
     const { email, password } = await c.req.json();
+    if (!email || !password) return c.json({ error: 'Email and password required' }, 400);
 
-    if (!email || !password) {
-      return c.json({ error: 'Email and password are required' }, 400);
-    }
+    // JOIN users + role-specific profile
+    const row = await c.env.DB.prepare(`
+      SELECT u.id, u.email, u.password_hash, u.name, u.role, u.phone,
+             s.matrix_no, s.program, s.session, s.semester, s.base_section, s.pa_name,
+             a.department, a.office_location, a.assigned_section, a.consultation_hours
+      FROM users u
+      LEFT JOIN students s ON u.id = s.user_id
+      LEFT JOIN advisors a ON u.id = a.user_id
+      WHERE u.email = ?
+    `).bind(email).first();
 
-    const user = await c.env.DB.prepare(
-      'SELECT id, email, password_hash, name, matrix_no, role, program, base_section, pa_name, department, office_location, assigned_section, consultation_hours FROM users WHERE email = ?'
-    ).bind(email).first();
+    if (!row) return c.json({ error: 'Invalid credentials' }, 401);
 
-    if (!user) {
-      return c.json({ error: 'Invalid credentials' }, 401);
-    }
-
-    // Verify password
     const encoder = new TextEncoder();
     const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(password + c.env.JWT_SECRET));
     const passwordHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 
-    if (passwordHash !== (user as any).password_hash) {
+    if (passwordHash !== (row as any).password_hash) {
       return c.json({ error: 'Invalid credentials' }, 401);
     }
 
     const token = await signToken(
-      { userId: user.id as string, email: user.email as string, role: user.role as string },
+      { userId: row.id as string, email: row.email as string, role: row.role as string },
       c.env.JWT_SECRET
     );
 
     return c.json({
       token,
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        matrixNo: user.matrix_no,
-        role: user.role,
-        program: user.program,
-        baseSection: user.base_section,
-        paName: user.pa_name,
-        department: user.department,
-        officeLocation: user.office_location,
-        assignedSection: user.assigned_section,
-        consultationHours: user.consultation_hours ? JSON.parse(user.consultation_hours as string) : undefined,
+        id: row.id, email: row.email, name: row.name, role: row.role, phone: row.phone,
+        matrixNo: (row as any).matrix_no, program: (row as any).program,
+        session: (row as any).session, semester: (row as any).semester,
+        baseSection: (row as any).base_section, paName: (row as any).pa_name,
+        department: (row as any).department, officeLocation: (row as any).office_location,
+        assignedSection: (row as any).assigned_section,
+        consultationHours: (row as any).consultation_hours ? JSON.parse((row as any).consultation_hours as string) : undefined,
       }
     });
   } catch (err: any) {
@@ -98,31 +103,27 @@ authRoutes.post('/login', async (c) => {
 authRoutes.get('/me', authMiddleware, async (c) => {
   const { userId } = c.get('user');
 
-  const user = await c.env.DB.prepare(
-    'SELECT id, email, name, matrix_no, role, program, session, semester, base_section, pa_name, phone, department, office_location, assigned_section, consultation_hours FROM users WHERE id = ?'
-  ).bind(userId).first();
+  const row = await c.env.DB.prepare(`
+    SELECT u.id, u.email, u.name, u.role, u.phone,
+           s.matrix_no, s.program, s.session, s.semester, s.base_section, s.pa_name,
+           a.department, a.office_location, a.assigned_section, a.consultation_hours
+    FROM users u
+    LEFT JOIN students s ON u.id = s.user_id
+    LEFT JOIN advisors a ON u.id = a.user_id
+    WHERE u.id = ?
+  `).bind(userId).first();
 
-  if (!user) {
-    return c.json({ error: 'User not found' }, 404);
-  }
+  if (!row) return c.json({ error: 'User not found' }, 404);
 
   return c.json({
     user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      matrixNo: user.matrix_no,
-      role: user.role,
-      program: user.program,
-      session: user.session,
-      semester: user.semester,
-      baseSection: user.base_section,
-      paName: user.pa_name,
-      phone: user.phone,
-      department: user.department,
-      officeLocation: user.office_location,
-      assignedSection: user.assigned_section,
-      consultationHours: user.consultation_hours ? JSON.parse(user.consultation_hours as string) : undefined,
+      id: row.id, email: row.email, name: row.name, role: row.role, phone: row.phone,
+      matrixNo: (row as any).matrix_no, program: (row as any).program,
+      session: (row as any).session, semester: (row as any).semester,
+      baseSection: (row as any).base_section, paName: (row as any).pa_name,
+      department: (row as any).department, officeLocation: (row as any).office_location,
+      assignedSection: (row as any).assigned_section,
+      consultationHours: (row as any).consultation_hours ? JSON.parse((row as any).consultation_hours as string) : undefined,
     }
   });
 });
@@ -132,25 +133,35 @@ authRoutes.patch('/profile', authMiddleware, async (c) => {
   const { userId } = c.get('user');
   const { name, matrixNo, program, session, semester, baseSection, phone } = await c.req.json();
 
-  const updates: string[] = [];
-  const values: any[] = [];
+  const now = Math.floor(Date.now() / 1000);
 
-  if (name !== undefined) { updates.push('name = ?'); values.push(name); }
-  if (matrixNo !== undefined) { updates.push('matrix_no = ?'); values.push(matrixNo); }
-  if (program !== undefined) { updates.push('program = ?'); values.push(program); }
-  if (session !== undefined) { updates.push('session = ?'); values.push(session); }
-  if (semester !== undefined) { updates.push('semester = ?'); values.push(semester); }
-  if (baseSection !== undefined) { updates.push('base_section = ?'); values.push(baseSection); }
-  if (phone !== undefined) { updates.push('phone = ?'); values.push(phone); }
-
-  if (updates.length === 0) {
-    return c.json({ error: 'No fields to update' }, 400);
+  // Update base user fields
+  if (name || phone) {
+    const uUpdates: string[] = [];
+    const uValues: any[] = [];
+    if (name) { uUpdates.push('name = ?'); uValues.push(name); }
+    if (phone) { uUpdates.push('phone = ?'); uValues.push(phone); }
+    if (uUpdates.length) {
+      uUpdates.push('updated_at = ?');
+      uValues.push(now, userId);
+      await c.env.DB.prepare(`UPDATE users SET ${uUpdates.join(', ')} WHERE id = ?`).bind(...uValues).run();
+    }
   }
 
-  updates.push("updated_at = datetime('now')");
-  values.push(userId);
-
-  await c.env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+  // Update student profile fields
+  if (matrixNo || program || session || semester || baseSection) {
+    const sUpdates: string[] = [];
+    const sValues: any[] = [];
+    if (matrixNo) { sUpdates.push('matrix_no = ?'); sValues.push(matrixNo); }
+    if (program) { sUpdates.push('program = ?'); sValues.push(program); }
+    if (session) { sUpdates.push('session = ?'); sValues.push(session); }
+    if (semester) { sUpdates.push('semester = ?'); sValues.push(semester); }
+    if (baseSection) { sUpdates.push('base_section = ?'); sValues.push(baseSection); }
+    if (sUpdates.length) {
+      sValues.push(userId);
+      await c.env.DB.prepare(`UPDATE students SET ${sUpdates.join(', ')} WHERE user_id = ?`).bind(...sValues).run();
+    }
+  }
 
   return c.json({ success: true });
 });
