@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "User Account",
+      "description": "User profile and role information.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "matrixNo": { "type": "string" },
+        "role": { "type": "string", "enum": ["STUDENT", "ADVISOR", "ADMIN"] },
+        "profile": { "type": "object" }
+      },
+      "required": ["id", "email", "name", "role"]
+    },
+    "CourseRegistration": {
+      "title": "Course Registration",
+      "description": "A student's course registration submission.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "matrixNo": { "type": "string" },
+        "baseSection": { "type": "string" },
+        "repeatCourses": { "type": "array" },
+        "selectedAddons": { "type": "object" },
+        "totalCredits": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "advisorNotes": { "type": "string" },
+        "advisorName": { "type": "string" }
+      },
+      "required": ["id", "studentId", "studentName", "matrixNo", "status", "timestamp"]
+    },
+    "TimetableSlot": {
+      "title": "Timetable Slot",
+      "description": "A single slot in the master timetable.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseCode": { "type": "string" },
+        "courseName": { "type": "string" },
+        "section": { "type": "string" },
+        "day": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "room": { "type": "string" },
+        "lecturer": { "type": "string" },
+        "creditHours": { "type": "number" },
+        "type": { "type": "string" },
+        "department": { "type": "string" }
+      },
+      "required": ["id", "courseCode", "day", "startTime", "endTime"]
+    },
+    "AdminNotification": {
+      "title": "Admin Notification",
+      "description": "Broadcast notifications from admins.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["deadline", "update", "warning", "info"] },
+        "date": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["id", "title", "message", "type", "active"]
+    },
+    "UserFeedback": {
+      "title": "User Feedback",
+      "description": "Feedback submitted by users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "role": { "type": "string" },
+        "category": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "userId", "message", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserAccount",
+      "description": "User profiles."
+    },
+    "registrations/{regId}": {
+      "schema": "CourseRegistration",
+      "description": "Student course registrations."
+    },
+    "masterSlots/{slotId}": {
+      "schema": "TimetableSlot",
+      "description": "Master timetable slots."
+    },
+    "notifications/{notifId}": {
+      "schema": "AdminNotification",
+      "description": "Admin broadcast notifications."
+    },
+    "feedback/{feedbackId}": {
+      "schema": "UserFeedback",
+      "description": "User feedback reports."
+    }
+  }
+}
