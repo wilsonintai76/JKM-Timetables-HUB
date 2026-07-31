@@ -1,56 +1,50 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "jkm-timetables-hub",
-  "main": "worker/index.ts",
-  "compatibility_date": "2026-07-31",
-  "compatibility_flags": ["nodejs_compat"],
-
-  "assets": {
-    "directory": "./dist",
-    "binding": "ASSETS"
-  },
-
-  "vars": {
-    "JWT_SECRET": "",
-    "ENVIRONMENT": "production"
-  },
-
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "jkm-timetables-kv"
-    }
-  ],
-
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "jkm-timetables-files"
-    }
-  ],
-
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "jkm-timetables-db",
-      "database_id": "jkm-timetables-db"
-    }
-  ],
-
-  "ai": {
-    "binding": "AI"
-  },
-
-  "observability": {
-    "enabled": true
-  },
-
-  "env": {
-    "staging": {
-      "name": "jkm-timetables-hub-staging",
-      "vars": {
-        "ENVIRONMENT": "staging"
-      }
-    }
-  }
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "jkm-timetables-hub",
+	"main": "worker/index.ts",
+	"compatibility_date": "2026-07-31",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	},
+	"vars": {
+		"JWT_SECRET": "",
+		"ENVIRONMENT": "production"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "KV",
+			"id": "dcdc3ca5d526462d956c9dd4e13a933e"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "FILES",
+			"bucket_name": "jkm-timetables-files"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "jkm-timetables-db",
+			"database_id": "0526f86f-c579-4543-a39f-bb7bc1449426"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"observability": {
+		"enabled": true
+	},
+	"env": {
+		"staging": {
+			"name": "jkm-timetables-hub-staging",
+			"vars": {
+				"ENVIRONMENT": "staging"
+			}
+		}
+	}
 }
