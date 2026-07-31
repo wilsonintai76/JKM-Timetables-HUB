@@ -12,7 +12,7 @@
 	},
 	"vars": {
 		"ENVIRONMENT": "production",
-		"VERSION": "1.2.0"
+		"VERSION": "1.2.1"
 	},
 	"kv_namespaces": [
 		{
