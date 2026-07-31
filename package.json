@@ -1,14 +1,23 @@
 {
-  "name": "react-example",
+  "name": "jkm-timetables-hub",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "dev": "vite",
+    "dev:worker": "wrangler dev",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:worker\"",
+    "build": "vite build",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "db:init": "wrangler d1 execute jkm-timetables-db --file=worker/db/schema.sql",
+    "db:seed": "wrangler d1 execute jkm-timetables-db --file=worker/db/seed.sql",
+    "db:init:local": "wrangler d1 execute jkm-timetables-db --file=worker/db/schema.sql --local",
+    "db:seed:local": "wrangler d1 execute jkm-timetables-db --file=worker/db/seed.sql --local",
+    "kv:create": "wrangler kv:namespace create jkm-timetables-kv",
+    "r2:create": "wrangler r2 bucket create jkm-timetables-files",
+    "types": "wrangler types",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,14 +38,16 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260730.0",
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.0",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "wrangler": "^4.38.0"
   }
 }
