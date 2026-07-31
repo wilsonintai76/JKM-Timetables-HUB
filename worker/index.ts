@@ -16,6 +16,7 @@ export type Bindings = {
   AI: Ai;
   JWT_SECRET: string;
   ENVIRONMENT: string;
+  VERSION: string;
   ASSETS: { fetch: (request: Request) => Promise<Response> };
 };
 
@@ -30,6 +31,13 @@ app.use('*', cors({
 
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok', env: c.env.ENVIRONMENT }));
+
+// Version endpoint (for frontend auto-updater)
+app.get('/version', (c) => c.json({
+  version: c.env.VERSION || '1.0.0',
+  env: c.env.ENVIRONMENT,
+  deployed: Math.floor(Date.now() / 1000),
+}));
 
 // Mount route groups
 app.route('/auth', authRoutes);

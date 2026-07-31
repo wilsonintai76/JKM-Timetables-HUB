@@ -11,7 +11,8 @@
 		"binding": "ASSETS"
 	},
 	"vars": {
-		"ENVIRONMENT": "production"
+		"ENVIRONMENT": "production",
+		"VERSION": "1.1.0"
 	},
 	"kv_namespaces": [
 		{

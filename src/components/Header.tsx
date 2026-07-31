@@ -42,6 +42,7 @@ interface HeaderProps {
   masterCount: number;
   sectionCount: number;
   themePrefs?: ThemePreferences;
+  appVersion?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -63,7 +64,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectProgramme,
   masterCount,
   sectionCount,
-  themePrefs
+  themePrefs,
+  appVersion
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const themeStyle = getThemePalette(themePrefs?.palette);
@@ -99,6 +101,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="text-right hidden md:block">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Access</p>
                 <p className={`text-[10px] font-black ${themeStyle.textPrimary}`}>{userRole}</p>
+                {appVersion && <p className="text-[8px] text-slate-400 mt-0.5">v{appVersion}</p>}
               </div>
               <button
                 onClick={onLogout}

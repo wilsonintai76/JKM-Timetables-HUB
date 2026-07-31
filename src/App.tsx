@@ -15,10 +15,7 @@ import {
   AdvisorProfile
 } from './types';
 import {
-  INITIAL_STUDENT_PROFILE,
-  INITIAL_NOTIFICATIONS,
-  SAMPLE_JKM_DATA,
-  SAMPLE_DEPARTMENT_DATASETS
+  INITIAL_STUDENT_PROFILE
 } from './data/sampleData';
 import {
   analyzeCourseClashes,
@@ -43,59 +40,37 @@ import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { LoginView } from './components/auth/LoginView';
 
 import {
-  auth,
-  db,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  onSnapshot,
-  query,
-  where,
-  orderBy,
-  handleFirestoreError,
-  OperationType,
-  FirebaseUser
-} from './lib/firebase';
+  getToken,
+  getStoredUser,
+  apiLogin,
+  apiRegister,
+  apiGetMe,
+  apiLogout,
+  apiGetSchedules,
+  apiGetNotifications,
+  apiGetRegistrations,
+  apiSubmitRegistration,
+  apiUpdateRegistration,
+  apiGetVersion,
+  getStoredVersion,
+  setStoredVersion,
+} from './lib/api';
 
 export default function App() {
   // --- STATE ---
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [appVersion, setAppVersion] = useState<string>('...');
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const [selectedProgramme, setSelectedProgramme] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('jkm_selected_programme');
-      return saved || 'ALL';
-    } catch (e) {
-      return 'ALL';
-    }
+    try { return localStorage.getItem('jkm_selected_programme') || 'ALL'; }
+    catch { return 'ALL'; }
   });
 
-  const [masterSlots, setMasterSlots] = useState<TimetableSlot[]>(() => {
-    try {
-      const saved = localStorage.getItem('jkm_master_slots');
-      return saved ? JSON.parse(saved) : SAMPLE_JKM_DATA;
-    } catch (e) {
-      return SAMPLE_JKM_DATA;
-    }
-  });
+  const [masterSlots, setMasterSlots] = useState<TimetableSlot[]>([]);
 
-  const [studentProfile, setStudentProfile] = useState<StudentProfile>(() => {
-    try {
-      const saved = localStorage.getItem('jkm_student_profile');
-      return saved ? JSON.parse(saved) : INITIAL_STUDENT_PROFILE;
-    } catch (e) {
-      return INITIAL_STUDENT_PROFILE;
-    }
-  });
+  const [studentProfile, setStudentProfile] = useState<StudentProfile>(INITIAL_STUDENT_PROFILE);
 
   const [advisorProfile, setAdvisorProfile] = useState<AdvisorProfile | null>(null);
 
@@ -103,12 +78,10 @@ export default function App() {
     try {
       const saved = localStorage.getItem('jkm_timetable_theme_prefs');
       return saved ? JSON.parse(saved) : { palette: 'cyber', font: 'sans' };
-    } catch (e) {
-      return { palette: 'cyber', font: 'sans' };
-    }
+    } catch { return { palette: 'cyber', font: 'sans' }; }
   });
 
-  const [notifications, setNotifications] = useState<AdminNotification[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [selectedRepeatCourses, setSelectedRepeatCourses] = useState<string[]>(['DJJ10013']);
   const [selectedAddons, setSelectedAddons] = useState<Record<string, string>>({});
   const [coursePriorities, setCoursePriorities] = useState<Record<string, PriorityLevel>>({});
@@ -146,94 +119,81 @@ export default function App() {
   
   const [parsingError, setParsingError] = useState<string | null>(null);
 
-  // --- FIREBASE AUTH & USER ACCOUNT SYNC ---
+  // --- AUTH: Restore session from stored token ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        setIsLoggedIn(true);
-        // Fetch or create user account
-        const userRef = doc(db, 'users', firebaseUser.uid);
+    const initAuth = async () => {
+      const token = getToken();
+      const storedUser = getStoredUser();
+
+      if (token && storedUser) {
         try {
-          const userDoc = await getDoc(userRef);
-          if (userDoc.exists()) {
-            const data = userDoc.data() as UserAccount;
-            setUserAccount(data);
-            setUserRole(data.role);
-            if (data.profile) {
-              if (data.role === 'ADVISOR') {
-                setAdvisorProfile(data.profile as AdvisorProfile);
-              } else {
-                setStudentProfile(data.profile as StudentProfile);
-              }
-            }
-          } else {
-            // Default new user as student
-            const newAccount: UserAccount = {
-              id: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name: firebaseUser.displayName || 'Anonymous',
-              role: 'STUDENT',
-              profile: INITIAL_STUDENT_PROFILE
-            };
-            await setDoc(userRef, newAccount);
-            setUserAccount(newAccount);
-            setUserRole('STUDENT');
-            setStudentProfile(INITIAL_STUDENT_PROFILE);
+          // Validate token is still good
+          const freshUser = await apiGetMe();
+          setUser(freshUser);
+          setUserRole(freshUser.role);
+          if (freshUser.baseSection) {
+            setStudentProfile(prev => ({ ...prev, baseSection: freshUser.baseSection, name: freshUser.name, matrixNo: freshUser.matrixNo || prev.matrixNo }));
           }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+        } catch {
+          // Token expired, clear
+          apiLogout();
+          setIsLoggedIn(false);
         }
-      } else {
-        setUserAccount(null);
-        setUserRole('STUDENT');
-        setIsLoggedIn(false);
       }
       setLoading(false);
-    });
-    return () => unsubscribe();
+    };
+    initAuth();
   }, []);
 
-  // --- FIRESTORE REAL-TIME SYNC ---
+  // --- VERSION CHECK (auto-updater) ---
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const v = await apiGetVersion();
+        setAppVersion(v.version);
+        const stored = getStoredVersion();
+        if (stored && stored !== v.version) {
+          // Version changed: force logout + clear cache
+          console.log(`[Updater] Version changed: ${stored} → ${v.version}. Clearing session.`);
+          apiLogout();
+          setUser(null);
+          setIsLoggedIn(false);
+          setDataLoaded(false);
+        }
+        setStoredVersion(v.version);
+      } catch {
+        // offline, keep current
+      }
+    };
+    checkVersion();
+  }, []);
+
+  // --- DATA LOADING: Fetch live data when logged in ---
   useEffect(() => {
     if (!user) return;
 
-    // Master Slots
-    const qSlots = query(collection(db, 'masterSlots'));
-    const unsubSlots = onSnapshot(qSlots, (snapshot) => {
-      const slots = snapshot.docs.map(doc => doc.data() as TimetableSlot);
-      if (slots.length > 0) {
-        setMasterSlots(slots);
-        setIsExcelLoaded(true);
-        setFileName('Firestore Database');
+    const loadData = async () => {
+      try {
+        const [slots, notifs, regs] = await Promise.all([
+          apiGetSchedules(),
+          apiGetNotifications(),
+          apiGetRegistrations(),
+        ]);
+
+        if (slots.length > 0) {
+          setMasterSlots(slots);
+          setIsExcelLoaded(true);
+          setFileName('Cloudflare D1 (Live)');
+        }
+        setNotifications(notifs);
+        setRegistrations(regs);
+        setDataLoaded(true);
+      } catch (err) {
+        console.error('Failed to load data:', err);
       }
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'masterSlots'));
-
-    // Notifications
-    const qNotifs = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-    const unsubNotifs = onSnapshot(qNotifs, (snapshot) => {
-      const notifs = snapshot.docs.map(doc => doc.data() as AdminNotification);
-      setNotifications(notifs);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'notifications'));
-
-    // Registrations
-    let qReg;
-    if (userRole === 'ADMIN' || userRole === 'ADVISOR') {
-      qReg = query(collection(db, 'registrations'), orderBy('timestamp', 'desc'));
-    } else {
-      qReg = query(collection(db, 'registrations'), where('studentId', '==', user.uid), orderBy('timestamp', 'desc'));
-    }
-    const unsubReg = onSnapshot(qReg, (snapshot) => {
-      const regs = snapshot.docs.map(doc => doc.data() as CourseRegistration);
-      setRegistrations(regs);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'registrations'));
-
-    return () => {
-      unsubSlots();
-      unsubNotifs();
-      unsubReg();
     };
-  }, [user, userRole]);
+    loadData();
+  }, [user]);
 
   // Save to LocalStorage whenever themePrefs changes
   useEffect(() => {
@@ -370,10 +330,15 @@ export default function App() {
     }
   };
 
-  const handleResetSample = () => {
-    setMasterSlots(SAMPLE_JKM_DATA);
-    setFileName('Jadual_Master_JKM_Sesi_1.xlsx (Built-in)');
-    setIsExcelLoaded(false);
+  const handleResetSample = async () => {
+    try {
+      const slots = await apiGetSchedules();
+      if (slots.length > 0) {
+        setMasterSlots(slots);
+        setFileName('Cloudflare D1 (Live)');
+        setIsExcelLoaded(true);
+      }
+    } catch { /* keep current */ }
     setParsingError(null);
   };
 
@@ -392,141 +357,94 @@ export default function App() {
 
   const handleLogin = async (email: string, pass: string) => {
     try {
-      await signInWithEmailAndPassword(auth, email, pass);
+      const data = await apiLogin(email, pass);
+      setUser(data.user);
+      setUserRole(data.user.role);
+      setIsLoggedIn(true);
+      if (data.user.baseSection) {
+        setStudentProfile(prev => ({ ...prev, baseSection: data.user.baseSection, name: data.user.name, matrixNo: data.user.matrixNo || prev.matrixNo }));
+      }
     } catch (error: any) {
       alert('Login failed: ' + error.message);
     }
   };
 
-  const handleSignUp = async (email: string, pass: string, name: string, role: 'STUDENT' | 'ADVISOR', section?: string) => {
+  const handleSignUp = async (email: string, pass: string, name: string, _role: 'STUDENT' | 'ADVISOR', _section?: string) => {
     try {
-      const res = await createUserWithEmailAndPassword(auth, email, pass);
-      // The auth state listener in useEffect will handle the user record creation
-      // but we update the profile immediately to set the correct role
-      const userRef = doc(db, 'users', res.user.uid);
-      await setDoc(userRef, {
-        id: res.user.uid,
-        email,
-        name: name || 'Anonymous',
-        role: role,
-        profile: role === 'STUDENT' ? {
-          ...INITIAL_STUDENT_PROFILE,
-          name: name || INITIAL_STUDENT_PROFILE.name,
-          email: email,
-          baseSection: section || INITIAL_STUDENT_PROFILE.baseSection
-        } : {
-          department: 'JKM',
-          officeLocation: '',
-          assignedSection: section || 'DKM3A',
-          consultationHours: []
-        }
-      }, { merge: true });
+      const data = await apiRegister(email, pass, name);
+      setUser(data.user);
+      setUserRole('STUDENT');
+      setIsLoggedIn(true);
     } catch (error: any) {
       alert('Sign up failed: ' + error.message);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setIsLoggedIn(false);
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
+  const handleLogout = () => {
+    apiLogout();
+    setUser(null);
+    setIsLoggedIn(false);
+    setDataLoaded(false);
+    setMasterSlots([]);
+    setNotifications([]);
+    setRegistrations([]);
   };
 
   const handleSubmitRegistration = async () => {
     if (!user) return;
 
-    // Check for existing pending registration
-    const existing = registrations.find(r => r.matrixNo === studentProfile.matrixNo && r.status === 'PENDING');
+    const existing = registrations.find(r => r.status === 'PENDING');
     if (existing) {
-      alert('You already have a pending registration submission. Please wait for advisor approval.');
+      alert('You already have a pending registration. Please wait for advisor approval.');
       return;
     }
 
-    const regId = 'REG-' + Date.now();
-    const newReg: CourseRegistration = {
-      id: regId,
-      studentId: user.uid,
-      studentName: studentProfile.name || user.displayName || 'Anonymous',
-      matrixNo: studentProfile.matrixNo,
-      baseSection: studentProfile.baseSection,
-      repeatCourses: selectedRepeatCourses,
-      selectedAddons: selectedAddons,
-      totalCredits: combinedSlots.reduce((acc, s) => acc + (s.creditHours || 3), 0),
-      status: 'PENDING',
-      timestamp: new Date().toISOString()
-    };
-
     try {
-      await setDoc(doc(db, 'registrations', regId), newReg);
+      await apiSubmitRegistration({
+        baseSection: studentProfile.baseSection,
+        repeatCourses: selectedRepeatCourses,
+        selectedAddons,
+        totalCredits: combinedSlots.reduce((acc, s) => acc + (s.creditHours || 3), 0),
+      });
       alert('Timetable submitted successfully for advisor endorsement!');
+      // Refresh registrations
+      const regs = await apiGetRegistrations();
+      setRegistrations(regs);
       setActiveTab('grid');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `registrations/${regId}`);
+    } catch (error: any) {
+      alert('Submission failed: ' + error.message);
     }
   };
 
   const handleUpdateRegistrationStatus = async (id: string, status: 'APPROVED' | 'REJECTED', notes: string) => {
     try {
-      await updateDoc(doc(db, 'registrations', id), { 
-        status, 
-        advisorNotes: notes,
-        advisorName: user?.displayName || 'Advisor'
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `registrations/${id}`);
+      await apiUpdateRegistration(id, status, notes);
+      const regs = await apiGetRegistrations();
+      setRegistrations(regs);
+    } catch (error: any) {
+      alert('Update failed: ' + error.message);
     }
   };
 
-  const handleAddNotification = async (message: string, type: AdminNotification['type'], title: string = 'Notice', date: string = new Date().toLocaleDateString()) => {
-    const id = 'NOTIF-' + Date.now();
-    const newNotif: AdminNotification = {
-      id,
-      title,
-      message,
-      type,
-      date,
-      active: true,
-    };
-    try {
-      await setDoc(doc(db, 'notifications', id), newNotif);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `notifications/${id}`);
-    }
+  const handleAddNotification = async (_message: string, _type: AdminNotification['type'], _title: string = 'Notice') => {
+    // Admin-only: would require admin API endpoint - skip for now (use D1 directly)
+    alert('Admin notification management coming soon.');
   };
 
-  const handleToggleNotification = async (id: string, active: boolean) => {
-    try {
-      await updateDoc(doc(db, 'notifications', id), { active });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `notifications/${id}`);
-    }
+  const handleToggleNotification = async (_id: string, _active: boolean) => {
+    alert('Admin notification management coming soon.');
   };
 
-  const handleDeleteNotification = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'notifications', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `notifications/${id}`);
-    }
+  const handleDeleteNotification = async (_id: string) => {
+    alert('Admin notification management coming soon.');
   };
 
-  const handleAddMasterSlot = async (slot: TimetableSlot) => {
-    try {
-      await setDoc(doc(db, 'masterSlots', slot.id), slot);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `masterSlots/${slot.id}`);
-    }
+  const handleAddMasterSlot = async (_slot: TimetableSlot) => {
+    alert('Admin slot management coming soon.');
   };
 
-  const handleDeleteMasterSlot = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'masterSlots', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `masterSlots/${id}`);
-    }
+  const handleDeleteMasterSlot = async (_id: string) => {
+    alert('Admin slot management coming soon.');
   };
 
   const handleLoadDraft = (draft: SavedDraft) => {
@@ -546,7 +464,7 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!user || !isLoggedIn) {
     return <LoginView onLogin={handleLogin} onSignUp={handleSignUp} />;
   }
 
@@ -574,6 +492,7 @@ export default function App() {
         masterCount={masterSlots.length}
         sectionCount={availableSections.length}
         themePrefs={themePrefs}
+        appVersion={appVersion}
       />
 
       {/* MAIN CONTENT AREA */}
